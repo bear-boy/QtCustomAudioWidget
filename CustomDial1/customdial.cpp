@@ -9,7 +9,7 @@ CustomDial::CustomDial()
 
 CustomDial::CustomDial(QWidget *widget)
 {
-
+    Q_UNUSED(widget);
 }
 
 void CustomDial::setValueColor(QColor val)
@@ -22,31 +22,31 @@ QColor CustomDial::getValueColor()
     return this->valueColor;
 }
 
-static int calcBigLineSize(int radius)
+void CustomDial::setDialColor(QColor val)
 {
-    int bigLineSize = radius / 6;
-    if (bigLineSize < 4)
-        bigLineSize = 4;
-    if (bigLineSize > radius / 2)
-        bigLineSize = radius / 2;
-    return bigLineSize;
+    this->dialColor = val;
 }
 
-static QPointF calcRadialPos(const CustomDial *dial, QRectF rectF, qreal offset)
+QColor CustomDial::getDialColor()
 {
-    const int width = dial->rect().width();
-    const int height = dial->rect().height();
+    return this->dialColor;
+}
+
+static QPointF calcRadialPos(const QStyleOptionSlider *dial, QRectF rectF, qreal offset)
+{
+    const int width = dial->rect.width();
+    const int height = dial->rect.height();
     const int r = qMin(rectF.width(), rectF.height()) / 2;
-    const int currentSliderPosition = dial->sliderPosition();
+    const int currentSliderPosition = dial->upsideDown ? dial->sliderPosition : (dial->maximum - dial->sliderPosition);
     qreal a = 0;
-    if (dial->maximum() == dial->minimum())
+    if (dial->maximum == dial->minimum)
         a = Q_PI / 2;
     else if (dial->dialWrapping)
-        a = Q_PI * 3 / 2 - (currentSliderPosition - dial->minimum()) * 2 * Q_PI
-            / (dial->maximum() - dial->minimum());
+        a = Q_PI * 3 / 2 - (currentSliderPosition - dial->minimum) * 2 * Q_PI
+            / (dial->maximum - dial->minimum);
     else
-        a = (Q_PI * 8 - (currentSliderPosition - dial->minimum()) * 10 * Q_PI
-            / (dial->maximum() - dial->minimum())) / 6;
+        a = (Q_PI * 8 - (currentSliderPosition - dial->minimum) * 10 * Q_PI
+            / (dial->maximum - dial->minimum)) / 6;
     qreal xc = width / 2.0;
     qreal yc = height / 2.0;
     qreal len = r;
@@ -55,26 +55,34 @@ static QPointF calcRadialPos(const CustomDial *dial, QRectF rectF, qreal offset)
     return pos;
 }
 
-static int calcArcAngle(const CustomDial *dial)
+static int calcArcAngle(const QStyleOptionSlider *dial)
 {
     qreal a = 0;
-    const int currentSliderPosition = dial->sliderPosition();
-    if (dial->maximum() == dial->minimum())
+    const int currentSliderPosition = dial->upsideDown ? dial->sliderPosition : (dial->maximum - dial->sliderPosition);
+    if (dial->maximum == dial->minimum)
         a = Q_PI / 2;
     else if (dial->dialWrapping)
-        a = Q_PI * 3 / 2 - (currentSliderPosition - dial->minimum()) * 2 * Q_PI
-            / (dial->maximum() - dial->minimum());
+        a = Q_PI * 3 / 2 - (currentSliderPosition - dial->minimum) * 2 * Q_PI
+            / (dial->maximum - dial->minimum);
     else
-        a = (Q_PI * 8 - (currentSliderPosition - dial->minimum()) * 10 * Q_PI
-            / (dial->maximum() - dial->minimum())) / 6;
+        a = (Q_PI * 8 - (currentSliderPosition - dial->minimum) * 10 * Q_PI
+            / (dial->maximum - dial->minimum)) / 6;
     qreal deg = qRadiansToDegrees(a);
-    return (int)deg;
+    if (deg > 0)
+        return qCeil(deg);
+    else
+        return qFloor(deg);
 }
 
 void CustomDial::paintEvent(QPaintEvent *pe)
 {
+    Q_UNUSED(pe);
+
     QPainter *painter = new QPainter(this);
     painter->setRenderHint(QPainter::Antialiasing);
+
+    QStyleOptionSlider option;
+    initStyleOption(&option);
 
     const int width = this->rect().width();
     const int height = this->rect().height();
@@ -90,7 +98,7 @@ void CustomDial::paintEvent(QPaintEvent *pe)
     painter->setPen(QPen(QColor(64,64,64),penSize*1.4));
     painter->drawArc(br, -60*16, 300*16);
 
-    // solid circle
+    // inner solid circle
     qreal circleX = br.center().x();
     qreal circleY = br.center().y();
     qreal circleWidth = br.width()*0.8;
@@ -112,7 +120,7 @@ void CustomDial::paintEvent(QPaintEvent *pe)
     painter->setBrush(solidCircle);
     painter->drawEllipse(brCircle);
 
-    // hollow circle
+    // outer hollow circle
     qreal hollowCircleWidth = circleWidth*0.96;
     qreal hollowCircleHeight = circleHeight*0.96;
     QRectF brHollowCircle = QRectF(circleX - hollowCircleWidth/2,
@@ -122,14 +130,15 @@ void CustomDial::paintEvent(QPaintEvent *pe)
     painter->setPen(QPen(QColor(224,224,224).darker(105),penSize*0.6));
     painter->drawEllipse(brHollowCircle);
 
-    // line
+    // pointer(line)
     painter->setPen(QPen(this->valueColor,penSize*1.4));
-    painter->drawLine(calcRadialPos(this, brHollowCircle, qreal(0.65)),
-                      calcRadialPos(this, brHollowCircle, qreal(0.912)));
+    painter->drawLine(calcRadialPos(&option, brHollowCircle, qreal(0.65)),
+                      calcRadialPos(&option, brHollowCircle, qreal(0.912)));
 
-    // draw value arc
+    // outer arc
+    int arcDegree = calcArcAngle(&option);
     if (this->value() != this->minimum()) {
         painter->setPen(QPen(this->valueColor,penSize*1.4));
-        painter->drawArc(br, 240*16, (calcArcAngle(this)-240)*16);
+        painter->drawArc(br, 240*16, (arcDegree-240)*16);
     }
 }
